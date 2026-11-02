@@ -2,8 +2,12 @@ import axios from 'axios'
 
 /**
  * Shared Axios instance.
- * Every request automatically includes the JWT from localStorage.
- * A 401 response clears the token so the user is returned to login.
+ *
+ * - Attaches the JWT from localStorage to every request.
+ * - On a 401 response, clears the stored token.
+ *   The redirect to /login is handled by ProtectedRoute / AuthContext,
+ *   NOT here — doing a hard location redirect would bypass React Router
+ *   and lose router state (e.g. the "redirect back after login" path).
  */
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
@@ -20,15 +24,15 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// ── Response interceptor: handle global 401 ───────────────────────────────
+// ── Response interceptor: clear stale token on 401 ────────────────────────
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      // Remove the expired / invalid token.
+      // AuthContext's useEffect will detect user === null and
+      // ProtectedRoute will redirect to /login automatically.
       localStorage.removeItem('token')
-      // A full page redirect is the safest fallback before the
-      // AuthContext is wired up.
-      window.location.href = '/login'
     }
     return Promise.reject(error)
   },

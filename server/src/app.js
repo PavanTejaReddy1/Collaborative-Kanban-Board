@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit'
 
 import { env } from './config/env.js'
 import healthRouter from './routes/health.js'
+import authRouter   from './routes/auth.js'
 
 const app = express()
 
@@ -39,10 +40,10 @@ if (env.isDev) {
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
-app.use('/api', healthRouter)
+app.use('/api',        healthRouter)
+app.use('/api/auth',   authRouter)
 
 // Feature routes will be mounted here as they are implemented:
-// app.use('/api/auth',          authRouter)
 // app.use('/api/organizations', orgRouter)
 // app.use('/api/tenants',       tenantRouter)
 // app.use('/api/boards',        boardRouter)
