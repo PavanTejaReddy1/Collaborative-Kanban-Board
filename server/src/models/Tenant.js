@@ -55,5 +55,5 @@ const tenantSchema = new mongoose.Schema(
 tenantSchema.index({ organizationId: 1, slug: 1 }, { unique: true })
 tenantSchema.index({ organizationId: 1, isActive: 1 })
 
-const Tenant = mongoose.model('Tenant', tenantSchema)
+const Tenant = mongoose.models['Tenant'] || mongoose.model('Tenant', tenantSchema)
 export default Tenant

@@ -4,6 +4,7 @@ import { Server as SocketIOServer } from 'socket.io'
 import { env } from './config/env.js'
 import { connectDatabase } from './config/database.js'
 import app from './app.js'
+import { registerSocketHandlers } from './sockets/handlers.js'
 
 async function bootstrap() {
   // 1. Connect to MongoDB.
@@ -37,17 +38,8 @@ async function bootstrap() {
   // Expose io on app so controllers can emit events if needed
   app.set('io', io)
 
-  // Placeholder — real socket handlers are registered in src/sockets/index.js
-  io.on('connection', (socket) => {
-    if (env.isDev) {
-      console.log(`🔌 Socket connected: ${socket.id}`)
-    }
-    socket.on('disconnect', () => {
-      if (env.isDev) {
-        console.log(`🔌 Socket disconnected: ${socket.id}`)
-      }
-    })
-  })
+  // Register all socket handlers (auth, presence, real-time events)
+  registerSocketHandlers(io)
 
   // 4. Start listening
   httpServer.listen(env.port, () => {

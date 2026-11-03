@@ -52,5 +52,5 @@ const organizationSchema = new mongoose.Schema(
 organizationSchema.index({ slug: 1 })
 organizationSchema.index({ createdBy: 1 })
 
-const Organization = mongoose.model('Organization', organizationSchema)
+const Organization = mongoose.models['Organization'] || mongoose.model('Organization', organizationSchema)
 export default Organization

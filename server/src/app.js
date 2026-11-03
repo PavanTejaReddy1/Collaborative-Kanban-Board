@@ -8,6 +8,7 @@ import { env } from './config/env.js'
 import healthRouter from './routes/health.js'
 import authRouter   from './routes/auth.js'
 import orgRouter    from './routes/organizations.js'
+import boardRouter  from './routes/boards.js'
 
 const app = express()
 
@@ -44,10 +45,8 @@ if (env.isDev) {
 app.use('/api',                healthRouter)
 app.use('/api/auth',           authRouter)
 app.use('/api/organizations',  orgRouter)
-
-// Feature routes will be mounted here as they are implemented:
-// app.use('/api/boards',        boardRouter)
-// app.use('/api/tasks',         taskRouter)
+// Board routes nested under tenant scope for strict isolation
+app.use('/api/organizations/:organizationId/tenants/:tenantId/boards', boardRouter)
 
 // ── 404 handler ───────────────────────────────────────────────────────────────
 app.use((req, res) => {

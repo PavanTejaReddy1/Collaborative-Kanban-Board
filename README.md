@@ -32,8 +32,9 @@ collaborative-kanban-board/
 ### Backend
 ```bash
 cd server
-cp .env.example .env   # fill in your values
+cp .env.example .env   # fill in MONGO_URI and JWT_SECRET
 npm install
+npm run seed           # populate demo data
 npm run dev            # starts on :5000
 ```
 
@@ -45,10 +46,32 @@ npm install
 npm run dev            # starts on :5173
 ```
 
+### Demo Login
+After running `npm run seed` in the server directory:
+| Field | Value |
+|-------|-------|
+| Email | `demo@kanban.app` |
+| Password | `Demo@1234` |
+
+Or click the **"Demo login"** button on the login page.
+
 ### Health Check
 ```
 GET http://localhost:5000/api/health
 ```
+
+## Deployment
+
+### Frontend → Vercel
+1. Connect your GitHub repo to Vercel
+2. Set root directory to `client`
+3. Add env vars: `VITE_API_BASE_URL`, `VITE_SOCKET_URL`
+
+### Backend → Render
+1. Connect your GitHub repo to Render
+2. Set root directory to `server`, build command `npm install`, start command `npm start`
+3. Add env vars from `server/.env.example` in the Render dashboard
+4. After deploy, run: `npm run seed` once to populate demo data
 
 ## Architecture
 

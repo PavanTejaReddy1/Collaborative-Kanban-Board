@@ -7,7 +7,11 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "lint": "echo \"No linter configured yet\""
+    "seed": "node src/seed.js",
+    "seed:fresh": "node src/seed.js --fresh",
+    "test": "npx vitest run --config vitest.config.js",
+    "test:watch": "npx vitest --config vitest.config.js",
+    "test:coverage": "npx vitest run --config vitest.config.js --coverage"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -29,6 +33,20 @@
     "socket.io": "4.7.5"
   },
   "devDependencies": {
-    "nodemon": "3.1.7"
+    "@vitest/coverage-v8": "2.1.4",
+    "nodemon": "3.1.7",
+    "supertest": "7.0.0",
+    "vitest": "2.1.4"
+  },
+  "vitest": {
+    "environment": "node",
+    "globals": true,
+    "testMatch": ["**/__tests__/**/*.test.js"],
+    "hookTimeout": 30000,
+    "testTimeout": 30000,
+    "coverage": {
+      "provider": "v8",
+      "reporter": ["text", "json", "html"]
+    }
   }
 }

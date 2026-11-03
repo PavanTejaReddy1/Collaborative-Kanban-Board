@@ -1,11 +1,15 @@
-import 'dotenv/config'
-
 /**
  * Centralised environment configuration.
- * All process.env reads are done here so the rest of the app
- * never accesses process.env directly, making it easy to validate
- * and mock in tests.
+ *
+ * In TEST mode: process.env is already populated by vitest.config.js `env` block
+ *               before any module is imported — skip dotenv entirely.
+ * In all other modes: load .env file (without overriding existing vars).
  */
+
+if (process.env.NODE_ENV !== 'test') {
+  const { config } = await import('dotenv')
+  config()
+}
 
 function required(key) {
   const value = process.env[key]

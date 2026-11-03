@@ -116,3 +116,72 @@ export function validate(schema, data) {
 
   return { value, error: null }
 }
+
+// ── Board schemas ─────────────────────────────────────────────────────────
+export const createBoardSchema = Joi.object({
+  title:       Joi.string().trim().min(1).max(120).required().messages({ 'any.required': 'Board title is required' }),
+  description: Joi.string().trim().max(500).allow('').default(''),
+})
+
+export const updateBoardSchema = Joi.object({
+  title:       Joi.string().trim().min(1).max(120),
+  description: Joi.string().trim().max(500).allow(''),
+}).min(1)
+
+// ── Column schemas ────────────────────────────────────────────────────────
+export const createColumnSchema = Joi.object({
+  title:    Joi.string().trim().min(1).max(80).required().messages({ 'any.required': 'Column title is required' }),
+  position: Joi.number().integer().min(0),
+  color:    Joi.string().pattern(/^#[0-9a-fA-F]{6}$/).default('#6366f1'),
+})
+
+export const updateColumnSchema = Joi.object({
+  title: Joi.string().trim().min(1).max(80),
+  color: Joi.string().pattern(/^#[0-9a-fA-F]{6}$/),
+}).min(1)
+
+export const reorderColumnsSchema = Joi.object({
+  // Array of { columnId, position } objects
+  columns: Joi.array().items(
+    Joi.object({
+      columnId: Joi.string().required(),
+      position: Joi.number().integer().min(0).required(),
+    }),
+  ).min(1).required(),
+})
+
+// ── Task schemas ──────────────────────────────────────────────────────────
+export const createTaskSchema = Joi.object({
+  title:       Joi.string().trim().min(1).max(200).required().messages({ 'any.required': 'Task title is required' }),
+  description: Joi.string().trim().max(5000).allow('').default(''),
+  priority:    Joi.string().valid('LOW', 'MEDIUM', 'HIGH', 'URGENT').default('MEDIUM'),
+  assignedTo:  Joi.string().allow(null, '').default(null),
+  dueDate:     Joi.date().allow(null).default(null),
+  position:    Joi.number().integer().min(0),
+  labels:      Joi.array().items(Joi.string().trim().max(40)).default([]),
+})
+
+export const updateTaskSchema = Joi.object({
+  title:       Joi.string().trim().min(1).max(200),
+  description: Joi.string().trim().max(5000).allow(''),
+  priority:    Joi.string().valid('LOW', 'MEDIUM', 'HIGH', 'URGENT'),
+  assignedTo:  Joi.string().allow(null, ''),
+  dueDate:     Joi.date().allow(null),
+  labels:      Joi.array().items(Joi.string().trim().max(40)),
+  version:     Joi.number().integer().min(1).required().messages({ 'any.required': 'Task version is required for updates' }),
+}).min(2) // at least version + one field
+
+export const moveTaskSchema = Joi.object({
+  columnId: Joi.string().required().messages({ 'any.required': 'Target column ID is required' }),
+  position: Joi.number().integer().min(0).required().messages({ 'any.required': 'Position is required' }),
+  version:  Joi.number().integer().min(1).required().messages({ 'any.required': 'Task version is required' }),
+})
+
+export const reorderTasksSchema = Joi.object({
+  tasks: Joi.array().items(
+    Joi.object({
+      taskId:   Joi.string().required(),
+      position: Joi.number().integer().min(0).required(),
+    }),
+  ).min(1).required(),
+})

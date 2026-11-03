@@ -1,176 +1,206 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth }         from '../contexts/AuthContext.jsx'
+import { Kanban, CheckSquare, Clock, BarChart3, Plus, ArrowRight } from 'lucide-react'
+import AppLayout      from '../components/layout/AppLayout.jsx'
+import { Button }     from '../components/ui/Button.jsx'
+import { useAuth }    from '../contexts/AuthContext.jsx'
 import { useOrganization } from '../contexts/OrganizationContext.jsx'
-import { useTenant }       from '../contexts/TenantContext.jsx'
-import { Button } from '../components/ui/Button.jsx'
+import { useTenant }  from '../contexts/TenantContext.jsx'
+import { useBoard }   from '../contexts/BoardContext.jsx'
+import * as boardApi  from '../api/boards.js'
 
-/**
- * DashboardPage
- *
- * Shows the current user, org, and tenant context.
- * Prompts users with no org to create one.
- * Will be replaced by the Kanban board UI in Phase 4.
- */
+const PRIORITY_COLOR = {
+  LOW: 'bg-gray-100 text-gray-600',
+  MEDIUM: 'bg-blue-100 text-blue-700',
+  HIGH: 'bg-orange-100 text-orange-700',
+  URGENT: 'bg-red-100 text-red-700',
+}
+
 export default function DashboardPage() {
-  const { user, logout }                           = useAuth()
-  const { organizations, activeOrg, activeOrgRole,
-          selectOrg, isLoadingOrgs }               = useOrganization()
-  const { tenants, activeTenant, activeTenantRole,
-          selectTenant, isLoadingTenants }          = useTenant()
-  const navigate                                   = useNavigate()
+  const { user }         = useAuth()
+  const { activeOrg, organizations, isLoadingOrgs } = useOrganization()
+  const { activeTenant } = useTenant()
+  const { boards, loadBoards, isLoading: boardsLoading, createBoard } = useBoard()
+  const navigate         = useNavigate()
+  const [activity,   setActivity]   = useState([])
+  const [statsError, setStatsError] = useState(null)
+  const [creating,   setCreating]   = useState(false)
 
-  const handleLogout = async () => { await logout() }
+  useEffect(() => { if (activeOrg && activeTenant) loadBoards() }, [activeOrg, activeTenant, loadBoards])
 
-  // ── No organization yet ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!activeOrg || !activeTenant) return
+    boardApi.getActivity(activeOrg._id, activeTenant._id, { limit: 15 })
+      .then(r => setActivity(r.data.data.logs))
+      .catch(() => setStatsError('Failed to load activity'))
+  }, [activeOrg, activeTenant])
+
+  // No org yet
   if (!isLoadingOrgs && organizations.length === 0) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-8">
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-10 max-w-md w-full text-center animate-fade-in">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-8">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-10 max-w-md w-full text-center">
           <div className="w-14 h-14 rounded-full bg-primary-100 flex items-center justify-center mx-auto mb-5">
-            <svg className="w-7 h-7 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-            </svg>
+            <Kanban className="w-7 h-7 text-primary-600" />
           </div>
           <h1 className="text-xl font-bold text-gray-900 mb-2">Welcome, {user?.name}!</h1>
-          <p className="text-gray-500 text-sm mb-6">
-            You don&apos;t belong to any organization yet. Create one to get started.
-          </p>
+          <p className="text-gray-500 text-sm mb-6">Create your first organization to get started.</p>
           <Button className="w-full" size="lg" onClick={() => navigate('/organizations/new')}>
             Create organization
           </Button>
-          <button onClick={handleLogout} className="mt-4 text-sm text-gray-400 hover:text-gray-600">
-            Sign out
-          </button>
         </div>
       </div>
     )
   }
 
+  const totalTasks     = boards.reduce((s, b) => s, 0)
+  const recentBoards   = boards.slice(0, 4)
+
+  const handleCreateBoard = async () => {
+    const title = prompt('Board title:')
+    if (!title?.trim()) return
+    setCreating(true)
+    try {
+      const board = await createBoard({ title: title.trim(), description: '' })
+      navigate(`/boards/${board._id}`)
+    } catch (e) {
+      alert(e.response?.data?.message || 'Failed to create board')
+    } finally { setCreating(false) }
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* ── Top Nav ─────────────────────────────────────────────────────── */}
-      <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center">
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7" />
-            </svg>
-          </div>
-          <span className="font-semibold text-gray-900 text-sm">Collaborative Kanban</span>
+    <AppLayout>
+      <div className="p-6 max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-gray-900">
+            Good {getTimeGreeting()}, {user?.name?.split(' ')[0]}! 👋
+          </h1>
+          <p className="text-gray-500 mt-1">
+            {activeOrg?.name} · {activeTenant?.name || 'Select a branch'}
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-600 hidden sm:block">{user?.email}</span>
-          <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-semibold text-xs">
-            {user?.name?.charAt(0)?.toUpperCase()}
-          </div>
-          <Button variant="secondary" size="sm" onClick={handleLogout}>Sign out</Button>
+
+        {/* Stats cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <StatCard icon={<Kanban className="w-5 h-5" />} label="Total Boards"   value={boards.length}  color="blue" />
+          <StatCard icon={<CheckSquare className="w-5 h-5" />} label="All Tasks"  value="—"              color="green" />
+          <StatCard icon={<Clock className="w-5 h-5" />}  label="In Progress"    value="—"              color="orange" />
+          <StatCard icon={<BarChart3 className="w-5 h-5" />} label="Completed"   value="—"              color="purple" />
         </div>
-      </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-8 flex flex-col gap-6">
-
-        {/* ── Organization Selector ──────────────────────────────────────── */}
-        <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 animate-fade-in">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-gray-900">Organization</h2>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/organizations/new')}>
-              + New
-            </Button>
-          </div>
-          {isLoadingOrgs ? (
-            <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {organizations.map(({ organization, role }) => (
-                <button
-                  key={organization._id}
-                  onClick={() => selectOrg(organization._id)}
-                  className={[
-                    'px-4 py-2 rounded-lg text-sm font-medium border transition-colors',
-                    activeOrg?._id === organization._id
-                      ? 'bg-primary-600 text-white border-primary-600'
-                      : 'bg-white text-gray-700 border-gray-300 hover:border-primary-400',
-                  ].join(' ')}
-                >
-                  {organization.name}
-                  <span className="ml-2 text-xs opacity-70">{role}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {activeOrg && (
-            <p className="mt-3 text-xs text-gray-400">
-              Active: <span className="font-medium text-gray-600">{activeOrg.name}</span>
-              {' '}· Slug: <code className="bg-gray-100 px-1 rounded">{activeOrg.slug}</code>
-              {' '}· Role: <span className="font-medium">{activeOrgRole}</span>
-            </p>
-          )}
-        </section>
-
-        {/* ── Tenant (Branch) Selector ───────────────────────────────────── */}
-        {activeOrg && (
-          <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 animate-fade-in">
+        {/* Boards + Activity */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Boards list */}
+          <div className="lg:col-span-2">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-gray-900">Branches in {activeOrg.name}</h2>
-              {['ORG_ADMIN'].includes(activeOrgRole) && (
-                <Button variant="ghost" size="sm" onClick={() => navigate('/tenants/new')}>
-                  + New branch
+              <h2 className="font-semibold text-gray-900">Recent Boards</h2>
+              <div className="flex gap-2">
+                <Button variant="ghost" size="sm" onClick={() => navigate('/boards')}>
+                  View all <ArrowRight className="w-3.5 h-3.5 ml-1" />
                 </Button>
-              )}
+                <Button size="sm" isLoading={creating} onClick={handleCreateBoard}>
+                  <Plus className="w-3.5 h-3.5" /> New board
+                </Button>
+              </div>
             </div>
 
-            {isLoadingTenants ? (
-              <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
-            ) : tenants.length === 0 ? (
-              <div className="text-sm text-gray-500 text-center py-6 border-2 border-dashed border-gray-200 rounded-xl">
-                No branches yet.
-                {activeOrgRole === 'ORG_ADMIN' && (
-                  <button
-                    onClick={() => navigate('/tenants/new')}
-                    className="ml-2 text-primary-600 hover:underline font-medium"
-                  >
-                    Create the first one.
-                  </button>
-                )}
+            {boardsLoading ? (
+              <div className="space-y-3">
+                {[1,2,3].map(i => <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />)}
+              </div>
+            ) : recentBoards.length === 0 ? (
+              <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
+                <Kanban className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500 font-medium">No boards yet</p>
+                <p className="text-gray-400 text-sm mt-1">Create your first board to start organizing work</p>
+                <Button className="mt-4" onClick={handleCreateBoard} isLoading={creating}>
+                  <Plus className="w-4 h-4" /> Create board
+                </Button>
               </div>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {tenants.map((tenant) => (
+              <div className="space-y-3">
+                {recentBoards.map(board => (
                   <button
-                    key={tenant._id}
-                    onClick={() => selectTenant(tenant._id)}
-                    className={[
-                      'px-4 py-2 rounded-lg text-sm font-medium border transition-colors',
-                      activeTenant?._id === tenant._id
-                        ? 'bg-primary-600 text-white border-primary-600'
-                        : 'bg-white text-gray-700 border-gray-300 hover:border-primary-400',
-                    ].join(' ')}
+                    key={board._id}
+                    onClick={() => navigate(`/boards/${board._id}`)}
+                    className="w-full bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4 hover:border-primary-300 hover:shadow-sm transition-all text-left"
                   >
-                    {tenant.name}
+                    <div className="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
+                      <Kanban className="w-5 h-5 text-primary-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900 truncate">{board.title}</p>
+                      <p className="text-sm text-gray-400 truncate">{board.description || 'No description'}</p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
                   </button>
                 ))}
               </div>
             )}
+          </div>
 
-            {activeTenant && (
-              <p className="mt-3 text-xs text-gray-400">
-                Active branch: <span className="font-medium text-gray-600">{activeTenant.name}</span>
-                {' '}· Role: <span className="font-medium">{activeTenantRole}</span>
-              </p>
-            )}
-          </section>
-        )}
-
-        {/* ── Phase status banner ────────────────────────────────────────── */}
-        <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 text-sm text-blue-700">
-          <strong>Phase 3 complete.</strong> Organization isolation, tenant management, and RBAC are working.
-          Board creation and the Kanban UI will be added in Phase 4.
+          {/* Activity Feed */}
+          <div>
+            <h2 className="font-semibold text-gray-900 mb-4">Recent Activity</h2>
+            <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 max-h-96 overflow-y-auto scrollbar-thin">
+              {activity.length === 0 ? (
+                <p className="text-sm text-gray-400 p-4 text-center">No activity yet</p>
+              ) : (
+                activity.map(log => (
+                  <div key={log._id} className="px-4 py-3">
+                    <div className="flex items-start gap-2">
+                      <div className="w-6 h-6 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-primary-600 text-xs font-bold">
+                          {log.userId?.name?.charAt(0)?.toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-gray-700">
+                          <span className="font-medium">{log.userId?.name}</span>{' '}
+                          <span className="text-gray-500">{formatAction(log.action)}</span>
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {new Date(log.createdAt).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
+      </div>
+    </AppLayout>
+  )
+}
 
-      </main>
+function StatCard({ icon, label, value, color }) {
+  const colors = {
+    blue:   'bg-blue-50 text-blue-600',
+    green:  'bg-green-50 text-green-600',
+    orange: 'bg-orange-50 text-orange-600',
+    purple: 'bg-purple-50 text-purple-600',
+  }
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <div className={`w-9 h-9 rounded-lg ${colors[color]} flex items-center justify-center mb-3`}>
+        {icon}
+      </div>
+      <p className="text-2xl font-bold text-gray-900">{value}</p>
+      <p className="text-sm text-gray-500 mt-0.5">{label}</p>
     </div>
   )
+}
+
+function getTimeGreeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'morning'
+  if (h < 17) return 'afternoon'
+  return 'evening'
+}
+
+function formatAction(action) {
+  return action.replace('.', ' ').replace('_', ' ')
 }

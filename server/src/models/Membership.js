@@ -70,5 +70,5 @@ membershipSchema.index(
   { unique: true },
 )
 
-const Membership = mongoose.model('Membership', membershipSchema)
+const Membership = mongoose.models['Membership'] || mongoose.model('Membership', membershipSchema)
 export default Membership
