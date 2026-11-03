@@ -1,53 +1,131 @@
-/**
- * Role constants.
- *
- * These are the three roles used across the application.
- * They apply at the MEMBERSHIP level (org/tenant), not at the
- * User document level. The Membership model (Phase 3) will store
- * which role a user holds within a specific organisation or tenant.
- *
- * Exported here so they can be imported consistently by any middleware,
- * controller, or service without magic strings.
- */
-export const ROLES = Object.freeze({
-  ORG_ADMIN:    'ORG_ADMIN',
-  TENANT_ADMIN: 'TENANT_ADMIN',
-  MEMBER:       'MEMBER',
-})
+import mongoose from 'mongoose'
+import Membership from '../models/Membership.js'
+import { ROLES } from '../utils/roles.js'
 
 /**
- * requireRole(...allowedRoles)
- *
- * Factory that returns an Express middleware enforcing that
- * req.user holds one of the specified roles within the current context.
- *
- * Usage:
- *   router.delete('/boards/:id', authenticate, requireRole(ROLES.ORG_ADMIN, ROLES.TENANT_ADMIN), handler)
- *
- * NOTE: In Phase 3, this middleware will be expanded to look up the
- * user's membership role for the organization/tenant derived from the
- * request params. For now it exposes the interface without the DB lookup
- * so routes can already declare their role requirements.
- *
- * @param  {...string} allowedRoles
- * @returns {import('express').RequestHandler}
+ * Role constants — re-exported here so route files only need one import.
  */
-export function requireRole(...allowedRoles) {
-  return (req, res, next) => {
-    // authenticate() must run before this middleware
-    if (!req.user) {
-      return res.status(401).json({
+export { ROLES }
+
+// ── resolveOrg ────────────────────────────────────────────────────────────
+/**
+ * resolveOrg
+ *
+ * Reads :organizationId from req.params, verifies that req.user is a
+ * member of that organization, and attaches:
+ *   req.organizationId   – the verified ObjectId
+ *   req.orgMembership    – the org-level Membership document
+ *   req.orgRole          – the user's role at org level (ORG_ADMIN or MEMBER)
+ *
+ * Must run after authenticate().
+ * Any route that operates within an organization must use this middleware.
+ */
+export async function resolveOrg(req, res, next) {
+  try {
+    const { organizationId } = req.params
+
+    if (!mongoose.Types.ObjectId.isValid(organizationId)) {
+      return res.status(400).json({ success: false, message: 'Invalid organization ID.' })
+    }
+
+    // Look up the user's org-level membership (tenantId: null)
+    const membership = await Membership.findOne({
+      userId:         req.user._id,
+      organizationId: new mongoose.Types.ObjectId(organizationId),
+      tenantId:       null,
+    })
+
+    if (!membership) {
+      return res.status(403).json({
         success: false,
-        message: 'Authentication required.',
+        message: 'You are not a member of this organization.',
       })
     }
 
-    // Phase 3 will resolve the contextual role from the Membership model.
-    // The resolved role will be attached to req.membershipRole by a separate
-    // tenant-scoping middleware. Guard against it being missing here.
-    const userRole = req.membershipRole
+    req.organizationId = membership.organizationId
+    req.orgMembership  = membership
+    req.orgRole        = membership.role
 
-    if (!userRole || !allowedRoles.includes(userRole)) {
+    next()
+  } catch (err) {
+    next(err)
+  }
+}
+
+// ── resolveTenant ─────────────────────────────────────────────────────────
+/**
+ * resolveTenant
+ *
+ * Reads :tenantId from req.params, verifies membership, and attaches:
+ *   req.tenantId         – the verified ObjectId
+ *   req.tenantMembership – the tenant-level Membership document
+ *   req.membershipRole   – the user's effective role in this tenant
+ *                          (ORG_ADMINs inherit TENANT_ADMIN privileges)
+ *
+ * Must run after resolveOrg().
+ */
+export async function resolveTenant(req, res, next) {
+  try {
+    const { tenantId } = req.params
+
+    if (!mongoose.Types.ObjectId.isValid(tenantId)) {
+      return res.status(400).json({ success: false, message: 'Invalid tenant ID.' })
+    }
+
+    const tenantObjId = new mongoose.Types.ObjectId(tenantId)
+
+    // ORG_ADMINs have implicit TENANT_ADMIN access to all tenants in their org
+    if (req.orgRole === ROLES.ORG_ADMIN) {
+      req.tenantId       = tenantObjId
+      req.membershipRole = ROLES.ORG_ADMIN // keep ORG_ADMIN so requireRole checks work
+      return next()
+    }
+
+    // Everyone else must have an explicit tenant-level membership
+    const membership = await Membership.findOne({
+      userId:         req.user._id,
+      organizationId: req.organizationId,
+      tenantId:       tenantObjId,
+    })
+
+    if (!membership) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have access to this tenant.',
+      })
+    }
+
+    req.tenantId         = tenantObjId
+    req.tenantMembership = membership
+    req.membershipRole   = membership.role
+
+    next()
+  } catch (err) {
+    next(err)
+  }
+}
+
+// ── requireRole ───────────────────────────────────────────────────────────
+/**
+ * requireRole(...allowedRoles)
+ *
+ * Must run after resolveOrg() and/or resolveTenant().
+ * Checks req.membershipRole (tenant level) or req.orgRole (org level).
+ *
+ * Usage:
+ *   router.delete('/:id', authenticate, resolveOrg, resolveTenant,
+ *     requireRole(ROLES.ORG_ADMIN, ROLES.TENANT_ADMIN), handler)
+ */
+export function requireRole(...allowedRoles) {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'Authentication required.' })
+    }
+
+    // Use the most specific role available
+    const role = req.membershipRole || req.orgRole
+
+    if (!role || !allowedRoles.includes(role)) {
       return res.status(403).json({
         success: false,
         message: 'You do not have permission to perform this action.',
