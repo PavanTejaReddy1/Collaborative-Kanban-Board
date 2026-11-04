@@ -41,3 +41,6 @@ logs/
 # ─── Test Coverage ───────────────────────────────────────────────────────────
 coverage/
 .nyc_output/
+
+# Leftover TypeScript config from Vite template (project uses plain JS)
+client/tsconfig.json
