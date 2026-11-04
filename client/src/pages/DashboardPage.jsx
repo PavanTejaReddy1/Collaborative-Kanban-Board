@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Kanban, CheckSquare, Clock, BarChart3, Plus, ArrowRight } from 'lucide-react'
+import { Kanban, CheckSquare, Clock, BarChart3, Plus, ArrowRight, RefreshCw } from 'lucide-react'
 import AppLayout      from '../components/layout/AppLayout.jsx'
 import { Button }     from '../components/ui/Button.jsx'
 import { useAuth }    from '../contexts/AuthContext.jsx'
@@ -9,33 +9,75 @@ import { useTenant }  from '../contexts/TenantContext.jsx'
 import { useBoard }   from '../contexts/BoardContext.jsx'
 import * as boardApi  from '../api/boards.js'
 
-const PRIORITY_COLOR = {
-  LOW: 'bg-gray-100 text-gray-600',
-  MEDIUM: 'bg-blue-100 text-blue-700',
-  HIGH: 'bg-orange-100 text-orange-700',
-  URGENT: 'bg-red-100 text-red-700',
-}
-
 export default function DashboardPage() {
   const { user }         = useAuth()
   const { activeOrg, organizations, isLoadingOrgs } = useOrganization()
-  const { activeTenant } = useTenant()
+  const { activeTenant, isLoadingTenants } = useTenant()
   const { boards, loadBoards, isLoading: boardsLoading, createBoard } = useBoard()
-  const navigate         = useNavigate()
-  const [activity,   setActivity]   = useState([])
-  const [statsError, setStatsError] = useState(null)
-  const [creating,   setCreating]   = useState(false)
+  const navigate = useNavigate()
 
-  useEffect(() => { if (activeOrg && activeTenant) loadBoards() }, [activeOrg, activeTenant, loadBoards])
+  const [activity,  setActivity]  = useState([])
+  const [taskStats, setTaskStats] = useState({ total: 0, inProgress: 0, done: 0 })
+  const [creating,  setCreating]  = useState(false)
 
+  // Load boards whenever org/tenant are ready
+  useEffect(() => {
+    if (activeOrg && activeTenant) loadBoards()
+  }, [activeOrg, activeTenant, loadBoards])
+
+  // Load activity
   useEffect(() => {
     if (!activeOrg || !activeTenant) return
-    boardApi.getActivity(activeOrg._id, activeTenant._id, { limit: 15 })
+    boardApi.getActivity(activeOrg._id, activeTenant._id, { limit: 20 })
       .then(r => setActivity(r.data.data.logs))
-      .catch(() => setStatsError('Failed to load activity'))
+      .catch(() => {})
   }, [activeOrg, activeTenant])
 
-  // No org yet
+  // Compute task stats from all boards in this tenant
+  useEffect(() => {
+    if (!activeOrg || !activeTenant || boards.length === 0) {
+      setTaskStats({ total: 0, inProgress: 0, done: 0 })
+      return
+    }
+    let total = 0, inProgress = 0, done = 0
+    // Fetch the full board data for each board to count tasks
+    const fetchAll = async () => {
+      for (const board of boards) {
+        try {
+          const res = await boardApi.getBoard(activeOrg._id, activeTenant._id, board._id)
+          const cols = res.data.data.columns || []
+          for (const col of cols) {
+            total += col.tasks.length
+            const titleLower = col.title.toLowerCase()
+            if (titleLower.includes('progress') || titleLower.includes('doing')) {
+              inProgress += col.tasks.length
+            }
+            if (titleLower.includes('done') || titleLower.includes('complete') || titleLower.includes('finished')) {
+              done += col.tasks.length
+            }
+          }
+        } catch (_) {}
+      }
+      setTaskStats({ total, inProgress, done })
+    }
+    fetchAll()
+  }, [boards, activeOrg, activeTenant])
+
+  // Show loading spinner while orgs/tenants are being fetched
+  const isInitializing = isLoadingOrgs || isLoadingTenants
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-gray-500">Loading your workspace…</p>
+        </div>
+      </div>
+    )
+  }
+
+  // No org yet (after loading completes)
   if (!isLoadingOrgs && organizations.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-8">
@@ -53,8 +95,7 @@ export default function DashboardPage() {
     )
   }
 
-  const totalTasks     = boards.reduce((s, b) => s, 0)
-  const recentBoards   = boards.slice(0, 4)
+  const recentBoards = boards.slice(0, 4)
 
   const handleCreateBoard = async () => {
     const title = prompt('Board title:')
@@ -71,27 +112,31 @@ export default function DashboardPage() {
   return (
     <AppLayout>
       <div className="p-6 max-w-6xl mx-auto">
+
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900">
             Good {getTimeGreeting()}, {user?.name?.split(' ')[0]}! 👋
           </h1>
-          <p className="text-gray-500 mt-1">
-            {activeOrg?.name} · {activeTenant?.name || 'Select a branch'}
+          <p className="text-gray-500 mt-1 flex items-center gap-2">
+            <span className="font-medium text-gray-700">{activeOrg?.name}</span>
+            <span className="text-gray-300">·</span>
+            <span>{activeTenant?.name || 'No branch selected'}</span>
           </p>
         </div>
 
-        {/* Stats cards */}
+        {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <StatCard icon={<Kanban className="w-5 h-5" />} label="Total Boards"   value={boards.length}  color="blue" />
-          <StatCard icon={<CheckSquare className="w-5 h-5" />} label="All Tasks"  value="—"              color="green" />
-          <StatCard icon={<Clock className="w-5 h-5" />}  label="In Progress"    value="—"              color="orange" />
-          <StatCard icon={<BarChart3 className="w-5 h-5" />} label="Completed"   value="—"              color="purple" />
+          <StatCard icon={<Kanban className="w-5 h-5" />}       label="Total Boards"   value={boards.length}          color="blue"   />
+          <StatCard icon={<CheckSquare className="w-5 h-5" />}  label="Total Tasks"    value={taskStats.total}        color="green"  />
+          <StatCard icon={<Clock className="w-5 h-5" />}        label="In Progress"    value={taskStats.inProgress}   color="orange" />
+          <StatCard icon={<BarChart3 className="w-5 h-5" />}    label="Completed"      value={taskStats.done}         color="purple" />
         </div>
 
         {/* Boards + Activity */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Boards list */}
+
+          {/* Boards */}
           <div className="lg:col-span-2">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-gray-900">Recent Boards</h2>
@@ -107,7 +152,9 @@ export default function DashboardPage() {
 
             {boardsLoading ? (
               <div className="space-y-3">
-                {[1,2,3].map(i => <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />)}
+                {[1,2,3].map(i => (
+                  <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />
+                ))}
               </div>
             ) : recentBoards.length === 0 ? (
               <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
@@ -124,7 +171,7 @@ export default function DashboardPage() {
                   <button
                     key={board._id}
                     onClick={() => navigate(`/boards/${board._id}`)}
-                    className="w-full bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4 hover:border-primary-300 hover:shadow-sm transition-all text-left"
+                    className="w-full bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4 hover:border-primary-300 hover:shadow-sm transition-all text-left group"
                   >
                     <div className="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
                       <Kanban className="w-5 h-5 text-primary-600" />
@@ -133,7 +180,7 @@ export default function DashboardPage() {
                       <p className="font-medium text-gray-900 truncate">{board.title}</p>
                       <p className="text-sm text-gray-400 truncate">{board.description || 'No description'}</p>
                     </div>
-                    <ArrowRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                    <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-primary-500 transition-colors flex-shrink-0" />
                   </button>
                 ))}
               </div>
@@ -145,7 +192,7 @@ export default function DashboardPage() {
             <h2 className="font-semibold text-gray-900 mb-4">Recent Activity</h2>
             <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 max-h-96 overflow-y-auto scrollbar-thin">
               {activity.length === 0 ? (
-                <p className="text-sm text-gray-400 p-4 text-center">No activity yet</p>
+                <p className="text-sm text-gray-400 p-6 text-center">No activity yet</p>
               ) : (
                 activity.map(log => (
                   <div key={log._id} className="px-4 py-3">
@@ -170,6 +217,7 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+
         </div>
       </div>
     </AppLayout>
@@ -202,5 +250,5 @@ function getTimeGreeting() {
 }
 
 function formatAction(action) {
-  return action.replace('.', ' ').replace('_', ' ')
+  return action.replace(/\./g, ' ').replace(/_/g, ' ')
 }

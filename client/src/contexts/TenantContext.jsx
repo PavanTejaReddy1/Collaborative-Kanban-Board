@@ -40,6 +40,7 @@ export function TenantProvider({ children }) {
     if (!activeOrg) {
       setTenants([])
       setActiveTenantId(null)
+      setActiveTenantRole(null)
       return
     }
     setIsLoadingTenants(true)
@@ -49,16 +50,22 @@ export function TenantProvider({ children }) {
       const list = res.data.data.tenants
       setTenants(list)
 
-      // Restore saved selection for this org
-      const saved = localStorage.getItem(tenantKey(activeOrg._id))
-      const match = list.find((t) => t._id === saved)
-      if (match) {
-        setActiveTenantId(match._id)
-      } else if (list.length > 0) {
-        setActiveTenantId(list[0]._id)
-        localStorage.setItem(tenantKey(activeOrg._id), list[0]._id)
-      } else {
+      if (list.length === 0) {
         setActiveTenantId(null)
+        return
+      }
+
+      // Check if saved tenant ID for this org is still valid
+      const saved = localStorage.getItem(tenantKey(activeOrg._id))
+      const savedMatch = saved && list.find((t) => t._id === saved)
+
+      if (savedMatch) {
+        setActiveTenantId(savedMatch._id)
+      } else {
+        // Auto-select first tenant (covers new login, stale saves, etc.)
+        const firstId = list[0]._id
+        localStorage.setItem(tenantKey(activeOrg._id), firstId)
+        setActiveTenantId(firstId)
       }
     } catch (err) {
       setTenantsError(err.response?.data?.message || 'Failed to load tenants.')

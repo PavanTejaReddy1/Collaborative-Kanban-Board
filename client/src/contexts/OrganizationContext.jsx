@@ -42,8 +42,17 @@ export function OrganizationProvider({ children }) {
       const list = res.data.data.organizations
       setOrganizations(list)
 
-      // Auto-select the first org if no active org is saved
-      if (list.length > 0 && !localStorage.getItem(ACTIVE_ORG_KEY)) {
+      if (list.length === 0) return
+
+      // Check if the saved activeOrgId belongs to this user's orgs
+      const savedId = localStorage.getItem(ACTIVE_ORG_KEY)
+      const savedMatch = savedId && list.find(m => m.organization._id === savedId)
+
+      if (savedMatch) {
+        // Saved selection is valid — keep it
+        setActiveOrgId(savedId)
+      } else {
+        // No saved selection OR saved org doesn't belong to this user — auto-select first
         const firstId = list[0].organization._id
         localStorage.setItem(ACTIVE_ORG_KEY, firstId)
         setActiveOrgId(firstId)
@@ -59,8 +68,11 @@ export function OrganizationProvider({ children }) {
     if (isAuthenticated) {
       refreshOrgs()
     } else {
+      // Clear all org/tenant selection state on logout
+      localStorage.removeItem(ACTIVE_ORG_KEY)
       setOrganizations([])
       setActiveOrgId(null)
+      setOrgsError(null)
     }
   }, [isAuthenticated, refreshOrgs])
 
