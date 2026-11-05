@@ -9,17 +9,23 @@ export function getSocket() {
 export function initSocket(token) {
   if (socket?.connected) return socket
 
-  socket = io(import.meta.env.VITE_SOCKET_URL, {
+  const socketUrl  = import.meta.env.VITE_SOCKET_URL
+  const isVercel   = socketUrl?.includes('vercel.app')
+
+  socket = io(socketUrl, {
     auth: { token },
-    transports: ['websocket', 'polling'],
+    // On Vercel (serverless) websocket upgrades aren't supported — use polling only.
+    // On Render/local we try websocket first for better performance.
+    transports: isVercel ? ['polling'] : ['websocket', 'polling'],
+    path: isVercel ? '/api/socket.io' : '/socket.io',
     reconnectionAttempts: 10,
     reconnectionDelay: 2000,
     autoConnect: true,
   })
 
-  socket.on('connect', () => console.log('🔌 Socket connected:', socket.id))
-  socket.on('disconnect', (reason) => console.log('🔌 Socket disconnected:', reason))
-  socket.on('connect_error', (err) => console.warn('🔌 Socket error:', err.message))
+  socket.on('connect',       () => console.log('🔌 Socket connected:', socket.id))
+  socket.on('disconnect', (r)  => console.log('🔌 Socket disconnected:', r))
+  socket.on('connect_error',   (err) => console.warn('🔌 Socket error:', err.message))
 
   return socket
 }
