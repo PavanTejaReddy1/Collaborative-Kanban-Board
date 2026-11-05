@@ -1,5 +1,9 @@
 # Collaborative Kanban Board
 
+🚀 **Live Demo:** [https://collaborative-kanban-board-pi.vercel.app](https://collaborative-kanban-board-pi.vercel.app)
+
+**Demo Login:** `demo@kanban.app` / `Demo@1234`
+
 A production-quality, multi-tenant, real-time Kanban board application.
 
 ## Tech Stack
