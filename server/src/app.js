@@ -42,10 +42,20 @@ if (env.isDev) {
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
+// Root endpoint — useful for deployment health checks
+app.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    name:    'Collaborative Kanban Board API',
+    version: '1.0.0',
+    status:  'running',
+    docs:    '/api/health',
+  })
+})
+
 app.use('/api',                healthRouter)
 app.use('/api/auth',           authRouter)
 app.use('/api/organizations',  orgRouter)
-// Board routes nested under tenant scope for strict isolation
 app.use('/api/organizations/:organizationId/tenants/:tenantId/boards', boardRouter)
 
 // ── 404 handler ───────────────────────────────────────────────────────────────
